@@ -9,6 +9,7 @@ import json
 import math
 import re
 import shutil
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -451,18 +452,53 @@ def ensure_ahiru_psd(key):
     配布元のアップローダーはダウンロード時に利用規約への同意を求めるため、
     ここでは自動で取得しない（ユーザーが同意して取得した zip を置いてもらう）。
     """
-    import subprocess
+    import os
 
     z = AHIRU_ZIPS[key]
-    if not z["zip"].exists():
-        raise FileNotFoundError(
-            f"{z['zip']} がありません。{z['page']} の説明文にあるパスワードで {z['url']} から zip を取得し、"
-            f"この名前で置いてください（MD5 {z['md5']}）")
-    dest = z["zip"].with_suffix("")
-    if not dest.exists():
-        from .setup_env import find_7z
-        subprocess.run([find_7z(), "x", "-y", "-mcp=932", f"-o{dest}", str(z["zip"])], check=True,
-                       stdout=subprocess.DEVNULL)
+    spec = {"zundamon": ZUNDAMON_AHIRU, "metan": METAN_AHIRU}[key]
+    zip_path = AHIRU / z["zip"].name
+    dest = AHIRU / zip_path.stem
+    psd = spec["psd"]
+    if psd.exists():
+        return
+    if not zip_path.exists():
+        home = Path(os.environ.get("ZVIDEO_SOZAI_HOME") or Path.home() / ".local/share/zundamon-video/sozai_src")
+        src = home / "ahiru" / zip_path.name
+        if not src.exists():
+            raise FileNotFoundError(
+                f"{zip_path} も {src} もありません。{z['page']} の説明文にあるパスワードで {z['url']} から "
+                f"zip を取得し、この名前でどちらかに置いてください")
+        zip_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, zip_path)
+    extract_zip(zip_path, dest)
+    if not psd.exists():
+        found = sorted(str(p) for p in dest.rglob("*.psd"))
+        raise FileNotFoundError(f"{psd} が見つかりません。zip の中身の PSD: {found or 'なし'}")
+
+
+def extract_zip(zip_path, dest):
+    """zip を Python の zipfile で展開する。UTF-8 フラグが無い名前は cp932 として直す。"""
+    import zipfile
+
+    dest = Path(dest)
+    root = dest.resolve()
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            name = info.filename
+            if not info.flag_bits & 0x800:
+                try:
+                    name = name.encode("cp437").decode("cp932")
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    pass
+            target = (dest / name).resolve()
+            if root != target and root not in target.parents:
+                raise ValueError(f"zip のパスが展開先の外を指しています: {info.filename}")
+            if name.endswith("/"):
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info) as r, open(target, "wb") as w:
+                shutil.copyfileobj(r, w)
 
 
 def prepare_zundamon():
