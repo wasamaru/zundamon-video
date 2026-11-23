@@ -93,10 +93,15 @@ def ensure_playwright_browser():
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--force-prepare", action="store_true", help="立ち絵パーツを作り直す")
+    ap.add_argument("--no-voicevox", action="store_true",
+                    help="Windows 版 VOICEVOX を取得しない（Docker 等の外部エンジンを使う。ZVIDEO_NO_VOICEVOX=1 でも同じ）")
     args = ap.parse_args(argv)
     for dest, url, ref in DOWNLOADS:
         print(f"{download(dest, url, ref):5s} {dest.relative_to(ASSETS.parent)}")
-    print("voicevox", ensure_voicevox())
+    if args.no_voicevox or os.environ.get("ZVIDEO_NO_VOICEVOX") == "1":
+        print("voicevox skip(docker)")
+    else:
+        print("voicevox", ensure_voicevox())
     ensure_playwright_browser()
 
     from .characters import prepare_metan, prepare_metan_official, prepare_zundamon, prepare_zundamon_official

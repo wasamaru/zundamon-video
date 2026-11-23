@@ -2,6 +2,7 @@
 import hashlib
 import json
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -34,6 +35,10 @@ def ensure_engine(timeout=180):
     if version:
         log("voicevox.ensure_engine", None, f"running {version}")
         return version
+    if sys.platform != "win32":
+        raise RuntimeError(
+            "VOICEVOX エンジンが 127.0.0.1:50021 で動いていません。Docker で起動してください: "
+            "docker run -d --name voicevox -p 50021:50021 voicevox/voicevox_engine:cpu-latest")
     exe = VOICEVOX_DIR / "run.exe"
     if not exe.exists():
         raise RuntimeError("VOICEVOX エンジンがありません。先に `uv run python -m zvideo.setup_env` を実行してください")
